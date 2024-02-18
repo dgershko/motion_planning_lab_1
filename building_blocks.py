@@ -1,4 +1,6 @@
 import numpy as np
+from kinematics import UR5e_PARAMS as UR_PARAMS
+from scipy.spatial.distance import cdist
 
 class Building_Blocks(object):
     '''
@@ -7,7 +9,7 @@ class Building_Blocks(object):
     '''
     def __init__(self, transform, ur_params, env, resolution=0.1, p_bias=0.05):
         self.transform = transform
-        self.ur_params = ur_params
+        self.ur_params = ur_params # type: UR_PARAMS
         self.env = env
         self.resolution = resolution
         self.p_bias = p_bias
@@ -18,10 +20,11 @@ class Building_Blocks(object):
         sample random configuration
         @param goal_conf - the goal configuration
         """
-        # TODO 
-        # hint - use self.ur_params.mechamical_limits
-        
-        # return np.array(conf)
+        if np.random.uniform(0, 1) < self.p_bias:
+            return goal_conf
+        constraints = np.array(list(self.ur_params.mechamical_limits.values()))
+        conf = np.random.uniform(constraints[:, 0], constraints[:, 1])
+        return np.array(conf)
         
 
     def is_in_collision(self, conf) -> bool:
@@ -31,11 +34,42 @@ class Building_Blocks(object):
         """
         # TODO 
         # hint: use self.transform.conf2sphere_coords(), self.ur_params.sphere_radius, self.env.obstacles
+        # global sphere coords: {link name: list of spheres}, s.t. list of spheres = [(x, y, z, [SOMETHING??])]
         global_sphere_coords = self.transform.conf2sphere_coords(conf)
+
         # arm - arm collision
+        parts = list(global_sphere_coords.keys())
+        arm_part_combinations = []
+        # get list of combination of robot parts, ignoring parts that are adjacent as they always collide at their connection point
+        for i in range(len(parts)):
+            for j in range(i + 2, len(parts)):
+                arm_part_combinations.append((parts[i], parts[j]))
+        for part_1, part_2 in arm_part_combinations:
+            spheres_1 = np.array(global_sphere_coords[part_1])
+            spheres_2 = np.array(global_sphere_coords[part_2])
+            distances = cdist(spheres_1[:, :-1], spheres_2[:, :-1])
+            differences = distances - (self.ur_params.sphere_radius[part_1] + self.ur_params.sphere_radius[part_2])
+            if np.any(differences < 0):
+                print(f"collision detected between {part_1} and {part_2}")
+                return True
+
+        # arm - obstacle collision
+        obstacle_spheres = self.env.obstacles
+        robot_spheres = np.concatenate(list(global_sphere_coords.values()), axis=0)
+        distances = cdist(robot_spheres[:, :-1], obstacle_spheres)
+        sphere_radii = np.concatenate([np.repeat(self.ur_params.sphere_radius[part], len(global_sphere_coords[part])) for part in parts])[:, None]
+        differences = distances - (sphere_radii + self.env.radius)
+        if np.any(differences < 0):
+            print("Collision detected with obstacle!")
+            return True
         
-        # arm - obstacle collision   
-        
+        # arm - floor collision
+        distances = robot_spheres[:, 2]
+        differences = distances - np.concatenate([np.repeat(self.ur_params.sphere_radius[part], len(global_sphere_coords[part])) for part in parts])
+        if np.any(differences < 0):
+            print("Collision with floor detected!")
+            return True
+        return False
     
     def local_planner(self, prev_conf ,current_conf) -> bool:
         '''check for collisions between two configurations - return True if trasition is valid
