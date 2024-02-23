@@ -79,32 +79,39 @@ class Building_Blocks(object):
         @param prev_conf - some configuration
         @param current_conf - current configuration
         '''
-        if (self.is_in_collision(prev_conf) or self.is_in_collision(current_conf)):
-            # if self.is_in_collision(prev_conf):
-            #     print(f"collision in initial config!")
-            # else:
-            #     print(f"collision in final config!")
-            return False
-        i_conf = prev_conf
-        # i_conf stands for intermediate configuration
-        # while loop runs while there's a point in the intermediate config that's further than self.res from the goal config
-        # by the way these comments were written by dgershko, not chatgpt
-        iteration = 0
-        while not np.allclose(i_conf, current_conf, atol=self.resolution):
-            iteration += 1
-            # mask of points that are close enough to the target conf
-            close_mask = np.isclose(i_conf, current_conf, atol=self.resolution)
-            # mask of points that are larger or smaller than the target conf
-            far_mask = i_conf < current_conf
-            far_mask_conf = np.where(far_mask, i_conf + self.resolution, i_conf - self.resolution)
-            # make far points closer, while not touching close enough points
-            i_conf = np.where(close_mask, i_conf, far_mask_conf)
-            # rounding to 4 decimals (the number 4 came to me in a dream)
-            i_conf = np.around(i_conf, 4)
-            if self.is_in_collision(i_conf):
-                # print(f"collision in iteration: {iteration}")
-                return False
-        return True
+        num_configs = int(np.max(np.abs(current_conf - prev_conf)) / self.resolution)
+        if num_configs < 3:
+            num_configs = 3
+        
+        configs = np.linspace(prev_conf, current_conf, num_configs, True)
+        return not any(self.is_in_collision(config) for config in configs)
+        
+        # if (self.is_in_collision(prev_conf) or self.is_in_collision(current_conf)):
+        #     # if self.is_in_collision(prev_conf):
+        #     #     print(f"collision in initial config!")
+        #     # else:
+        #     #     print(f"collision in final config!")
+        #     return False
+        # i_conf = prev_conf
+        # # i_conf stands for intermediate configuration
+        # # while loop runs while there's a point in the intermediate config that's further than self.res from the goal config
+        # # by the way these comments were written by dgershko, not chatgpt
+        # iteration = 0
+        # while not np.allclose(i_conf, current_conf, atol=self.resolution):
+        #     iteration += 1
+        #     # mask of points that are close enough to the target conf
+        #     close_mask = np.isclose(i_conf, current_conf, atol=self.resolution)
+        #     # mask of points that are larger or smaller than the target conf
+        #     far_mask = i_conf < current_conf
+        #     far_mask_conf = np.where(far_mask, i_conf + self.resolution, i_conf - self.resolution)
+        #     # make far points closer, while not touching close enough points
+        #     i_conf = np.where(close_mask, i_conf, far_mask_conf)
+        #     # rounding to 4 decimals (the number 4 came to me in a dream)
+        #     i_conf = np.around(i_conf, 4)
+        #     if self.is_in_collision(i_conf):
+        #         # print(f"collision in iteration: {iteration}")
+        #         return False
+        # return True
 
     
     def edge_cost(self, conf1, conf2):
